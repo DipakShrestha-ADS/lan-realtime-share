@@ -154,3 +154,59 @@ textarea {
     cursor: pointer;
 }
 
+.watermark {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: right;
+    pointer-events: none;
+    line-height: 1.3;
+    z-index: 9999;
+
+    /* Gradient text */
+    background: linear-gradient(135deg, #2563eb, #22c55e, #f59e0b);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+
+    /* Animations */
+    animation: floatPulse 6s ease-in-out infinite;
+}
+
+/* Animate float + pulse */
+@keyframes floatPulse {
+    0% {
+        transform: translateY(0px) rotate(0deg);
+        opacity: 0.9;
+    }
+    25% {
+        transform: translateY(-4px) rotate(-1deg);
+        opacity: 1;
+    }
+    50% {
+        transform: translateY(0px) rotate(0deg);
+        opacity: 0.9;
+    }
+    75% {
+        transform: translateY(4px) rotate(1deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(0px) rotate(0deg);
+        opacity: 0.9;
+    }
+}
+
+.watermark a {
+    color: inherit; /* gradient applies */
+    text-decoration: underline;
+}
+
+.watermark a:hover {
+    filter: brightness(1.2);
+}
+
+

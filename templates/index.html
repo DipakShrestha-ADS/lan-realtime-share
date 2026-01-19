@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LAN Realtime Share</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <header class="topbar">
+        <div class="title">LAN Realtime Share</div>
+
+        <div class="actions">
+            <span id="status" class="status offline">Offline</span>
+            <button class="btn secondary" onclick="location.reload()">Refresh</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="card">
+            <h3>Realtime Text</h3>
+            <textarea id="text" placeholder="Start typing..."></textarea>
+            <button class="btn primary" onclick="copyText()">Copy</button>
+        </section>
+
+        <section class="card">
+            <h3>File Sharing</h3>
+
+            <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="setTimeout(loadFiles, 500)">
+                <input type="file" name="file" required />
+                <button class="btn primary" type="submit">Upload</button>
+            </form>
+
+            <ul id="files" class="file-list"></ul>
+        </section>
+    </main>
+
+    <script>
+        const textarea = document.getElementById("text");
+        const filesList = document.getElementById("files");
+        const statusEl = document.getElementById("status");
+
+        let ws;
+        let reconnectInterval = 3000; // 3 seconds
+
+        function setStatus(online) {
+            statusEl.textContent = online ? "Online" : "Offline";
+            statusEl.className = `status ${online ? "online" : "offline"}`;
+        }
+
+        function connectWS() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+
+            ws.onopen = () => setStatus(true);
+
+            ws.onclose = () => {
+                setStatus(false);
+                // Try reconnect after 3 seconds
+                setTimeout(connectWS, reconnectInterval);
+            };
+
+            ws.onerror = () => setStatus(false);
+
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === "FILE_CHANGED") loadFiles();
+                } catch {
+                    textarea.value = e.data;
+                }
+            };
+        }
+
+        // Text sync
+        textarea.oninput = () => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(textarea.value);
+        };
+
+        // Copy button
+        function copyText() {
+            navigator.clipboard.writeText(textarea.value);
+        }
+
+        // Connect initially
+        connectWS();
+
+        async function loadFiles() {
+            const res = await fetch("/files");
+            const files = await res.json();
+            filesList.innerHTML = "";
+
+            const now = Math.floor(Date.now() / 1000);
+
+            files.forEach(f => {
+                const remaining = Math.max(f.expiresAt - now, 0);
+
+                const li = document.createElement("li");
+                li.className = "file-card";
+                li.dataset.exp = f.expiresAt;
+
+                li.innerHTML = `
+            <div>
+                <strong>${f.name}</strong>
+                <div class="timer" data-exp="${f.expiresAt}"></div>
+            </div>
+            <div class="file-actions">
+                <a href="/files/${f.name}" download>Download</a>
+                <button onclick="deleteFile('${f.name}')">Delete</button>
+            </div>
+        `;
+                filesList.appendChild(li);
+            });
+        }
+
+
+        // Countdown update every second
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            document.querySelectorAll(".timer").forEach(el => {
+                const exp = parseInt(el.dataset.exp);
+                const sec = Math.max(exp - now, 0);
+                el.textContent = sec > 0 ? `Expires in ${Math.floor(sec / 60)}m ${sec % 60}s` : "Expired";
+            });
+        }, 1000);
+
+        // Delete file
+        async function deleteFile(name) {
+            await fetch(`/delete?name=${encodeURIComponent(name)}`);
+            loadFiles(); // Refresh list immediately
+        }
+
+        // Load files initially
+        loadFiles();
+    </script>
+
+</body>
+
+</html>

@@ -41,6 +41,7 @@ output/
 1. **Clone or download** the repository.
 2. Navigate to the `output/` folder.
 3. Ensure all folders (`static/`, `templates/`, `uploads/`) and `lan-realtime-share.exe` exist in `output/`.
+4. If uploads folder is missing, create the folder named uploads
 4. Run the server by double-clicking `lan-realtime-share.exe` or via command prompt:
 
 ```c

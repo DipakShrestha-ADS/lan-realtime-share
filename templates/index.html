@@ -10,14 +10,19 @@
 
     <header class="topbar">
         <div class="title">LAN Realtime Share</div>
-
+        <nav class="topnav">
+            <a href="/" id="menuHome" class="menu-link">Home</a>
+            <a href="/direct-share" id="menuDirect" class="menu-link">Direct
+                Share</a>
+        </nav>
         <div class="actions">
             <span id="status" class="status offline">Offline</span>
-            <button class="btn secondary" onclick="location.reload()">Refresh</button>
+            <button class="btn secondary"
+                onclick="location.reload()">Refresh</button>
         </div>
     </header>
 
-    <main class="container">
+    <main class="container page" id="homePage">
         <section class="card">
             <h3>Realtime Text</h3>
             <textarea id="text" placeholder="Start typing..."></textarea>
@@ -27,29 +32,113 @@
         <section class="card">
             <h3>File Sharing</h3>
 
-            <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="setTimeout(loadFiles, 500)">
-                <input type="file" name="file" required />
-                <button class="btn primary" type="submit">Upload</button>
-            </form>
+            <div class="upload-section">
+                <div class="upload-controls">
+                    <button type="button" class="btn primary"
+                        onclick="document.getElementById('fileInput').click()">
+                        📁 Upload Files
+                    </button>
+                    <button type="button" class="btn primary"
+                        onclick="document.getElementById('folderInput').click()">
+                        📂 Upload Folder
+                    </button>
+                    <button type="button" class="btn danger" id="clearAllBtn"
+                        style="display:none;" onclick="clearAllFiles()">
+                        🗑️ Clear All
+                    </button>
+                </div>
+                <input type="file" id="fileInput" name="files" multiple
+                    style="display:none" onchange="handleFileUpload(event)" />
+                <input type="file" id="folderInput" name="folder"
+                    webkitdirectory mozdirectory multiple style="display:none"
+                    onchange="handleFileUpload(event)" />
+            </div>
 
-            <ul id="files" class="file-list"></ul>
+            <div id="uploadProgress" style="display:none; margin-top: 10px;">
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <p id="progressText"
+                    style="font-size: 12px; color: #6b7280; margin: 5px 0;">
+                    Uploading...</p>
+            </div>
+
+            <ul id="files" class="file-tree"></ul>
         </section>
     </main>
 
-    <!-- Watermark -->
+    <main class="container page" id="directPage">
+        <section class="card">
+            <h3>Direct Share</h3>
+            <p class="direct-note">Host can register a local absolute path
+                (file/folder) on the <strong>server machine</strong>. Receiver
+                downloads directly with resume support.
+            </p>
+            <p class="direct-note">Browser security does not expose absolute
+                host path from picker. Use <strong>Choose Folder</strong> for
+                helper name, then paste host absolute path.</p>
+            <div class="direct-tip" role="note"
+                aria-label="ZIP sharing recommendation">
+                <strong>Recommended for best speed:</strong> share a
+                <strong>.zip file</strong> instead of a raw folder. Compress the
+                folder to ZIP first for faster and more stable transfer.
+            </div>
+
+            <div id="hostInfoBox" class="host-info" style="display:none;"></div>
+
+            <div class="direct-controls">
+                <input id="directPathInput" class="direct-input" type="text"
+                    placeholder="/Users/mac/Projects/MyBigFolder" />
+                <button id="directChooseBtn" class="btn secondary" type="button"
+                    onclick="chooseFolderHint()">Choose Folder</button>
+                <label class="direct-check">
+                    <input id="requireCodeInput" type="checkbox" />
+                    Require one-time code
+                </label>
+                <button id="directAddBtn" class="btn primary" type="button"
+                    onclick="registerDirectShare()">Add Direct Share</button>
+                <button id="directRemoveAllBtn" class="btn danger" type="button"
+                    onclick="removeAllDirectShares()">Remove All</button>
+            </div>
+
+            <ul id="directShares" class="file-tree"></ul>
+        </section>
+    </main>
+
     <div class="watermark">
         <span>Developed By: Dipak Shrestha | </span>
-        <span>GitHub: <a href="https://github.com/DipakShrestha-ADS" target="_blank">DipakShrestha-ADS</a></span>
+        <span>GitHub: <a href="https://github.com/DipakShrestha-ADS"
+                target="_blank">DipakShrestha-ADS</a></span>
     </div>
 
 
     <script>
+        const pathName = window.location.pathname;
+        const isDirectPage = pathName === "/direct-share";
+
         const textarea = document.getElementById("text");
         const filesList = document.getElementById("files");
         const statusEl = document.getElementById("status");
+        const uploadProgress = document.getElementById("uploadProgress");
+        const progressFill = document.getElementById("progressFill");
+        const progressText = document.getElementById("progressText");
+        const directSharesList = document.getElementById("directShares");
+        const directPathInput = document.getElementById("directPathInput");
+        const requireCodeInput = document.getElementById("requireCodeInput");
+        const directAddBtn = document.getElementById("directAddBtn");
+        const directChooseBtn = document.getElementById("directChooseBtn");
+        const directRemoveAllBtn = document.getElementById("directRemoveAllBtn");
+        const hostInfoBox = document.getElementById("hostInfoBox");
+        let canRegisterDirectShare = true;
+        let canManageHostActions = true;
+
+        document.getElementById("homePage").style.display = isDirectPage ? "none" : "grid";
+        document.getElementById("directPage").style.display = isDirectPage ? "grid" : "none";
+        document.getElementById("menuHome").classList.toggle("active", !isDirectPage);
+        document.getElementById("menuDirect").classList.toggle("active", isDirectPage);
 
         let ws;
-        let reconnectInterval = 3000; // 3 seconds
+        const reconnectInterval = 3000;
 
         function setStatus(online) {
             statusEl.textContent = online ? "Online" : "Offline";
@@ -57,88 +146,473 @@
         }
 
         function connectWS() {
-            ws = new WebSocket(`ws://${location.host}/ws`);
+            const wsProto = location.protocol === "https:" ? "wss" : "ws";
+            ws = new WebSocket(`${wsProto}://${location.host}/ws`);
 
             ws.onopen = () => setStatus(true);
-
             ws.onclose = () => {
                 setStatus(false);
-                // Try reconnect after 3 seconds
                 setTimeout(connectWS, reconnectInterval);
             };
-
             ws.onerror = () => setStatus(false);
 
             ws.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
-                    if (msg.type === "FILE_CHANGED") loadFiles();
+                    if (msg.type === "FILE_CHANGED") {
+                        if (!isDirectPage) loadFiles();
+                        if (isDirectPage) {
+                            loadDirectShares();
+                            loadHostInfo();
+                        }
+                    }
                 } catch {
-                    textarea.value = e.data;
+                    if (textarea) textarea.value = e.data;
                 }
             };
         }
 
-        // Text sync
-        textarea.oninput = () => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(textarea.value);
-        };
-
-        // Copy button
-        function copyText() {
-            navigator.clipboard.writeText(textarea.value);
+        if (textarea) {
+            textarea.oninput = () => {
+                if (ws && ws.readyState === WebSocket.OPEN) ws.send(textarea.value);
+            };
         }
 
-        // Connect initially
+        function copyText() {
+            if (textarea) navigator.clipboard.writeText(textarea.value);
+        }
+
         connectWS();
+
+        function formatBytes(bytes) {
+            if (!bytes) return "0 B";
+            const units = ["B", "KB", "MB", "GB", "TB"];
+            let value = bytes;
+            let idx = 0;
+            while (value >= 1024 && idx < units.length - 1) {
+                value /= 1024;
+                idx++;
+            }
+            return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+        }
+
+        function formatDuration(seconds) {
+            if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+            const total = Math.max(0, Math.round(seconds));
+            const h = Math.floor(total / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const s = total % 60;
+            if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+            return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        }
+
+        function uploadWithProgress(formData, fileCount) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", "/upload", true);
+
+                const startedAt = Date.now();
+                let lastLoaded = 0;
+                let lastAt = startedAt;
+                let smoothedSpeed = 0;
+
+                xhr.upload.onprogress = (e) => {
+                    if (!e.lengthComputable) return;
+
+                    const now = Date.now();
+                    const deltaBytes = e.loaded - lastLoaded;
+                    const deltaMs = Math.max(now - lastAt, 1);
+                    const instantSpeed = (deltaBytes * 1000) / deltaMs;
+                    smoothedSpeed = smoothedSpeed === 0 ? instantSpeed : (smoothedSpeed * 0.75 + instantSpeed * 0.25);
+
+                    lastLoaded = e.loaded;
+                    lastAt = now;
+
+                    const percent = Math.min(Math.round((e.loaded / e.total) * 100), 100);
+                    const elapsedSec = Math.max((now - startedAt) / 1000, 0.001);
+                    const avgSpeed = e.loaded / elapsedSec;
+                    const speed = smoothedSpeed > 0 ? smoothedSpeed : avgSpeed;
+                    const remainingBytes = Math.max(e.total - e.loaded, 0);
+                    const etaSec = speed > 0 ? remainingBytes / speed : Infinity;
+
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = `Uploading ${fileCount} item(s): ${percent}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)}) • ${formatBytes(speed)}/s • ETA ${formatDuration(etaSec)}`;
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        progressFill.style.width = "100%";
+                        progressText.textContent = `Upload complete (${fileCount} item(s))`;
+                        resolve(xhr.responseText);
+                    } else {
+                        reject(new Error(`Upload failed with status ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error("Network error during upload"));
+                xhr.send(formData);
+            });
+        }
+
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (const file of files) {
+                const relativePath = file.webkitRelativePath || file.name;
+                formData.append("files", file, file.name);
+                formData.append("relativePaths", relativePath);
+            }
+
+            uploadProgress.style.display = "block";
+            progressFill.style.width = "0%";
+            progressText.textContent = `Preparing upload (${files.length} item(s))...`;
+
+            try {
+                await uploadWithProgress(formData, files.length);
+                document.getElementById("fileInput").value = "";
+                document.getElementById("folderInput").value = "";
+                setTimeout(loadFiles, 300);
+            } catch (error) {
+                alert("Upload error: " + error.message);
+            } finally {
+                setTimeout(() => {
+                    uploadProgress.style.display = "none";
+                    progressFill.style.width = "0%";
+                    progressText.textContent = "Uploading...";
+                }, 700);
+            }
+        }
+
+        function buildTopLevelEntities(files) {
+            const folders = new Map();
+            const topLevelFiles = [];
+
+            files.forEach(file => {
+                const path = file.path || file.name;
+                const parts = path.split("/");
+                if (parts.length === 1) {
+                    topLevelFiles.push({ ...file, path });
+                    return;
+                }
+
+                const rootFolder = parts[0];
+                const existing = folders.get(rootFolder);
+                if (!existing || file.expiresAt > existing.expiresAt) {
+                    folders.set(rootFolder, { name: rootFolder, path: rootFolder, expiresAt: file.expiresAt });
+                }
+            });
+
+            return {
+                folders: Array.from(folders.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                files: topLevelFiles.sort((a, b) => a.name.localeCompare(b.name))
+            };
+        }
+
+        function renderTopLevelList(entities) {
+            const ul = document.createElement("ul");
+            ul.className = "file-tree";
+
+            entities.folders.forEach(folder => {
+                const li = document.createElement("li");
+                li.className = "folder-item";
+                const folderDeleteButton = canManageHostActions
+                    ? `<button class="btn-icon danger" onclick="deleteItem('${folder.path}', true, event)" title="Delete folder">🗑️</button>`
+                    : "";
+                li.innerHTML = `
+                    <div class="folder-header">
+                        <span class="folder-icon">📁</span>
+                        <span class="folder-name">${folder.name}</span>
+                        <span class="folder-actions">
+                            <button class="btn-icon" onclick="downloadFolder('${folder.path}', event)" title="Download as ZIP">Download ZIP</button>
+                            ${folderDeleteButton}
+                        </span>
+                    </div>
+                `;
+                ul.appendChild(li);
+            });
+
+            entities.files.forEach(file => {
+                const li = document.createElement("li");
+                li.className = "file-item";
+                const fileDeleteButton = canManageHostActions
+                    ? `<button class="btn-icon danger" onclick="deleteItem('${file.path}', false, event)" title="Delete">🗑️</button>`
+                    : "";
+                li.innerHTML = `
+                    <div class="file-info">
+                        <span class="file-icon">📄</span>
+                        <div>
+                            <strong>${file.name}</strong>
+                            <div class="timer" data-exp="${file.expiresAt}"></div>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        <a href="/files/${encodeURIComponent(file.path)}" download title="Download">⬇️</a>
+                        ${fileDeleteButton}
+                    </div>
+                `;
+                ul.appendChild(li);
+            });
+
+            return ul;
+        }
 
         async function loadFiles() {
             const res = await fetch("/files");
             const files = await res.json();
             filesList.innerHTML = "";
 
-            const now = Math.floor(Date.now() / 1000);
+            const clearAllBtn = document.getElementById("clearAllBtn");
+            if (!files || files.length === 0) {
+                filesList.innerHTML = "<p style='color: #9ca3af; font-size: 14px;'>No files uploaded yet</p>";
+                clearAllBtn.style.display = "none";
+                return;
+            }
 
-            files.forEach(f => {
-                const remaining = Math.max(f.expiresAt - now, 0);
-
-                const li = document.createElement("li");
-                li.className = "file-card";
-                li.dataset.exp = f.expiresAt;
-
-                li.innerHTML = `
-            <div>
-                <strong>${f.name}</strong>
-                <div class="timer" data-exp="${f.expiresAt}"></div>
-            </div>
-            <div class="file-actions">
-                <a href="/files/${f.name}" download>Download</a>
-                <button onclick="deleteFile('${f.name}')">Delete</button>
-            </div>
-        `;
-                filesList.appendChild(li);
-            });
+            clearAllBtn.style.display = canManageHostActions ? "block" : "none";
+            const entities = buildTopLevelEntities(files);
+            filesList.appendChild(renderTopLevelList(entities));
+            updateTimers();
         }
 
-
-        // Countdown update every second
-        setInterval(() => {
+        function updateTimers() {
             const now = Math.floor(Date.now() / 1000);
             document.querySelectorAll(".timer").forEach(el => {
-                const exp = parseInt(el.dataset.exp);
+                const exp = parseInt(el.dataset.exp, 10);
                 const sec = Math.max(exp - now, 0);
                 el.textContent = sec > 0 ? `Expires in ${Math.floor(sec / 60)}m ${sec % 60}s` : "Expired";
             });
-        }, 1000);
-
-        // Delete file
-        async function deleteFile(name) {
-            await fetch(`/delete?name=${encodeURIComponent(name)}`);
-            loadFiles(); // Refresh list immediately
         }
 
-        // Load files initially
-        loadFiles();
+        setInterval(updateTimers, 1000);
+
+        async function deleteItem(path, isFolder, event) {
+            event.stopPropagation();
+            if (!canManageHostActions) {
+                alert("Delete is only allowed from the server host browser.");
+                return;
+            }
+            if (!confirm(`Delete ${isFolder ? "folder" : "file"}?`)) return;
+            const response = await fetch(`/delete?path=${encodeURIComponent(path)}&isFolder=${isFolder}`);
+            if (response.ok) {
+                loadFiles();
+                return;
+            }
+            if (response.status === 403) {
+                alert("Delete is only allowed from the server host browser.");
+            }
+        }
+
+        function downloadFolder(path, event) {
+            event.stopPropagation();
+            window.location.href = `/download-zip?path=${encodeURIComponent(path)}`;
+        }
+
+        async function clearAllFiles() {
+            if (!canManageHostActions) {
+                alert("Clear All is only allowed from the server host browser.");
+                return;
+            }
+            if (!confirm("Delete ALL uploaded files and folders?")) return;
+            const response = await fetch("/clear-all", { method: "POST" });
+            if (response.ok) {
+                loadFiles();
+                return;
+            }
+            if (response.status === 403) {
+                alert("Clear All is only allowed from the server host browser.");
+            }
+        }
+
+        function renderDirectShares(items) {
+            directSharesList.innerHTML = "";
+            if (!items || items.length === 0) {
+                directSharesList.innerHTML = "<p style='color: #6b7280; font-size: 13px;'>No direct shares yet.</p>";
+                return;
+            }
+
+            items.forEach(item => {
+                const li = document.createElement("li");
+                li.className = "direct-row";
+                const protection = item.requireCode ? (item.codeUsed ? "Code used" : "Code protected") : "Open";
+                const typeLabel = item.isDir ? "Folder" : "File";
+                const removeBtn = canManageHostActions
+                    ? `<button class="btn-icon danger" onclick="deleteDirectShare('${item.id}')">Remove</button>`
+                    : "";
+                li.innerHTML = `
+                    <div class="direct-main">
+                        <div class="file-info">
+                            <span class="file-icon">${item.isDir ? "📁" : "📄"}</span>
+                            <div>
+                                <strong>${item.name}</strong>
+                                <div class="timer">${item.isDir ? "Directory stream" : formatBytes(item.size)} • Added ${new Date(item.addedAt * 1000).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        <div class="direct-badges">
+                            <span class="badge type">${typeLabel}</span>
+                            <span class="badge ${item.requireCode ? "secure" : "open"}">${protection}</span>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn-icon" onclick="startDirectDownload('${item.id}', ${item.requireCode ? "true" : "false"})" title="Download with resume support">Download</button>
+                        ${removeBtn}
+                    </div>
+                `;
+                directSharesList.appendChild(li);
+            });
+        }
+
+        async function loadHostInfo() {
+            try {
+                const response = await fetch("/direct-share/host-info");
+                if (!response.ok) return;
+                const info = await response.json();
+                canRegisterDirectShare = info.canRegisterDirectShare !== false;
+                canManageHostActions = canRegisterDirectShare;
+                hostInfoBox.style.display = "block";
+                hostInfoBox.innerHTML = `
+                    <div><strong>Server Host:</strong> ${info.hostname || "-"}</div>
+                    <div><strong>Current User:</strong> ${info.user || "-"}</div>
+                    <div><strong>Home Directory:</strong> ${info.homeDir || "-"}</div>
+                    <div><strong>Add Direct Share:</strong> ${canRegisterDirectShare ? "Enabled (host browser)" : "Disabled on this client"}</div>
+                `;
+
+                const controlsDisabled = !canRegisterDirectShare;
+                directPathInput.disabled = controlsDisabled;
+                requireCodeInput.disabled = controlsDisabled;
+                directAddBtn.disabled = controlsDisabled;
+                directChooseBtn.disabled = controlsDisabled;
+                directRemoveAllBtn.disabled = controlsDisabled;
+                if (!canRegisterDirectShare) {
+                    directPathInput.placeholder = "Open /direct-share on server host browser to add direct share";
+                }
+                if (!isDirectPage) {
+                    loadFiles();
+                } else {
+                    loadDirectShares();
+                }
+            } catch (_) { }
+        }
+
+        async function loadDirectShares() {
+            try {
+                const response = await fetch("/direct-shares");
+                if (!response.ok) return;
+                const items = await response.json();
+                renderDirectShares(items);
+            } catch (_) { }
+        }
+
+        async function registerDirectShare() {
+            if (!canRegisterDirectShare) {
+                alert("Direct Share can only be added from the server host browser.");
+                return;
+            }
+
+            const path = directPathInput.value.trim();
+            if (!path) {
+                alert("Please enter an absolute local path on host machine.");
+                return;
+            }
+
+            const response = await fetch("/direct-share/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path, requireCode: requireCodeInput.checked })
+            });
+
+            if (!response.ok) {
+                let message = "Register failed";
+                try {
+                    const err = await response.json();
+                    if (err.checkedPath) {
+                        message = `${err.error || message}\nChecked on host: ${err.host || "server"}\nPath: ${err.checkedPath}\n${err.hint || ""}`;
+                    } else {
+                        message = err.error || message;
+                    }
+                } catch (_) {
+                    const text = await response.text();
+                    message = text || message;
+                }
+                alert(message);
+                return;
+            }
+
+            const payload = await response.json();
+            if (payload.oneTimeCode) {
+                alert(`One-time code for this share: ${payload.oneTimeCode}\nShare this only with trusted receiver. It can be used once.`);
+            }
+
+            directPathInput.value = "";
+            requireCodeInput.checked = false;
+            loadDirectShares();
+        }
+
+        function chooseFolderHint() {
+            const picker = document.createElement("input");
+            picker.type = "file";
+            picker.webkitdirectory = true;
+            picker.multiple = true;
+            picker.onchange = () => {
+                if (!picker.files || picker.files.length === 0) return;
+                const first = picker.files[0];
+                const folderName = (first.webkitRelativePath || "").split("/")[0] || first.name;
+                if (!directPathInput.value.trim()) {
+                    directPathInput.value = folderName;
+                }
+                alert("Browser security hides absolute host path. Paste host absolute path manually, for example: /Users/mac/Projects/" + folderName);
+            };
+            picker.click();
+        }
+
+        function startDirectDownload(id, requireCode) {
+            let url = `/direct-share/download?id=${encodeURIComponent(id)}`;
+            if (requireCode) {
+                const code = prompt("Enter one-time code:");
+                if (!code) return;
+                url += `&code=${encodeURIComponent(code.trim())}`;
+            }
+            window.location.href = url;
+        }
+
+        async function deleteDirectShare(id) {
+            if (!canRegisterDirectShare) {
+                alert("Direct share remove is only allowed from the server host browser.");
+                return;
+            }
+            if (!confirm("Remove this direct share?")) return;
+            const response = await fetch(`/direct-share/delete?id=${encodeURIComponent(id)}`, { method: "POST" });
+            if (response.ok) {
+                loadDirectShares();
+                return;
+            }
+            if (response.status === 403) {
+                alert("Direct share remove is only allowed from the server host browser.");
+            }
+        }
+
+        async function removeAllDirectShares() {
+            if (!canRegisterDirectShare) {
+                alert("Remove All is only allowed from the server host browser.");
+                return;
+            }
+            if (!confirm("Remove ALL direct shares?")) return;
+            const response = await fetch("/direct-share/clear-all", { method: "POST" });
+            if (response.ok) {
+                loadDirectShares();
+                return;
+            }
+            if (response.status === 403) {
+                alert("Remove All is only allowed from the server host browser.");
+            }
+        }
+
+        loadHostInfo();
+        if (!isDirectPage) loadFiles();
+        if (isDirectPage) {
+            loadDirectShares();
+        }
     </script>
 
 </body>

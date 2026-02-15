@@ -1,177 +1,234 @@
 # LAN Realtime Share
 
-A **LAN-based realtime text and file sharing platform** developed by **Dipak Shrestha**.  
+A LAN-only realtime sharing app built with Go.
 
-**GitHub:** [DipakShrestha-ADS](https://github.com/DipakShrestha-ADS)
+- Realtime text sync across devices
+- File and folder upload/download from browser
+- Direct Share mode (serve host files/folders directly, with optional one-time code)
+- No cloud dependency: works inside your local network
 
-> Built with **Go** for speed, simplicity, and cross-platform support.  
-
----
-
----
-
-## Overview
-
-LAN LIVE SHARE is a **local server application** that allows you to:
-
-- Share **text messages** in real-time with other devices on your LAN
-- Upload and share **files** with automatic countdown timers
-- Download or delete shared files instantly
-- View **online/offline server status**
-- All features work **locally on your network**, no internet required
-- Works on Windows, Linux, and Mac
-
-Everything is self-contained inside the `output/` folder.  
-
-> Note: Since this is a **local server**, everything you share stays **within your LAN**, so it’s **safe and private**.  
-
-> **Hint:** The server runs entirely on your machine; other devices just connect via your LAN IP.
----
-
-## How It Works
-
-1. When you run the server executable, it starts a **local web server** on your machine.
-2. Other devices on the same **LAN network** can access it using your machine's **IP address** and port `9000`.
-3. Anything you **share — text or files — is synced in real-time** across all connected devices on the network.
-4. Files are **stored temporarily** (with countdown timers) and automatically deleted after expiry or when manually removed.
+Developer: Dipak Shrestha  
+GitHub: https://github.com/DipakShrestha-ADS
 
 ---
 
----
+## 1) Clone the project
 
-## Folder Structure
-
-All required files are inside the `output/` folder:
-
+```bash
+git clone https://github.com/DipakShrestha-ADS/lan-realtime-share.git
+cd lan-realtime-share
 ```
 
+---
+
+## 2) Build binaries ( Ignore this if you are cloning )
+
+### Prerequisite
+- Go 1.23+
+
+### Build using Makefile
+
+```bash
+make build-linux
+make build-linux-arm64
+make build-mac
+make build-mac-arm64
+make build-win-from-linux   # from Linux/macOS for Windows target
+# or on Windows host:
+make build-win
+```
+
+Built files are generated in `output/`.
+
+---
+
+## 3) Run **after build** (step-by-step)
+
+This section is for running the compiled app from `output/`.
+
+### 3.1 Verify `output/` has required files
+
+Expected structure:
+
+```text
 output/
-├─ lan-realtime-share.exe      <-- Windows executable
-├─ static/                     <-- CSS, JS files
-├─ templates/                  <-- HTML templates
-├─ uploads/                    <-- File storage (auto-created / TTL)
-├─ README.md                   <-- This file
-
-````
-
----
-
-## Running the Application || Getting Started
-
-1. **Clone or download** the repository.
-2. Navigate to the `output/` folder.
-3. Ensure all folders (`static/`, `templates/`, `uploads/`) and `lan-realtime-share.exe` exist in `output/`.
-4. If uploads folder is missing, create the folder named uploads
-4. Run the server by double-clicking `lan-realtime-share.exe` or via command prompt:
-
-```c
-// Powershell Command
-./lan-realtime-share.exe
-// Command Prompt Command
-lan-realtime-share.exe
-````
-
-5. Open your browser:
-
-```c
-http://localhost:9000
+├─ lan-realtime-share-linux-amd64
+├─ lan-realtime-share-linux-arm64
+├─ lan-realtime-share-mac-amd64
+├─ lan-realtime-share-mac-arm64
+├─ lan-realtime-share.exe
+├─ static/
+└─ templates/
 ```
 
-6. Other devices on the same LAN can access using your IP address:
+> `uploads/` is created automatically at runtime (in your current working directory).
 
-```c
-http://<YOUR_IP>:9000
+### 3.2 Choose the correct binary for your OS/architecture
 
-// Example: http://192.168.16.0:9000
-/* 
-    * To find your device ip *
-    1. Windows:  type ipconfig from command prompt
-    2. Linux/Macos: type ifconfig from terminal
-*/
-```
+| OS | Architecture | Binary |
+|---|---|---|
+| Linux | x86_64 / amd64 | `output/lan-realtime-share-linux-amd64` |
+| Linux | arm64 | `output/lan-realtime-share-linux-arm64` |
+| macOS (Intel) | amd64 | `output/lan-realtime-share-mac-amd64` |
+| macOS (Apple Silicon M1/M2/M3) | arm64 | `output/lan-realtime-share-mac-arm64` |
+| Windows | amd64 | `output/lan-realtime-share.exe` |
 
-7. Start sharing text and files in real-time instantly!
+### 3.3 Start the server from inside `output/`
 
----
+Running from `output/` ensures `static/` and `templates/` are found correctly.
 
-## Quick Example (Go-powered!)
-
-The server is built in Go. Starting it is as simple as:
-
-```go
-package main
-
-func main() {
-    cleanUploads()
-	startCleanup()
-	
-	os.MkdirAll("uploads", 0755)
-    http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/ws", wsHandler)
-	http.HandleFunc("/upload", uploadHandler)
-	http.HandleFunc("/files", listFilesHandler)
-	http.HandleFunc("/delete", deleteFileHandler)
-
-	http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir("uploads"))))
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-    // Start the LAN Live Share server on port 9000
-    startServer(":9000")
-}
-```
-
----
-
-## LAN LIVE SHARE – API Routes
-
-This LAN Live Share server exposes the following **HTTP endpoints** for text and file sharing.
-All routes are accessible locally via `http://localhost:9000` or your LAN IP `http://<YOUR_IP>:9000`.
-
-| Route                | Method | Description                                                                                        |
-| -------------------- | ------ | -------------------------------------------------------------------------------------------------- |
-| `/`                  | GET    | Serves the main web interface for text and file sharing.                                           |
-| `/ws`                | GET    | WebSocket endpoint for **real-time text messages**. All connected clients sync instantly.          |
-| `/upload`            | POST   | Upload a file to the server. The uploaded file will appear in the file list for all clients.       |
-| `/files`             | GET    | Returns the list of **all uploaded files** with countdown timers (remaining time before deletion). |
-| `/delete`            | POST   | Delete a specific file from the server. The deletion is **synced across all clients**.             |
-| `/files/<filename>`  | GET    | Download a shared file by its name.                                                                |
-| `/static/<filepath>` | GET    | Serves static assets (CSS, JS, images) used by the web interface.                                  |
-
----
-
-### Example Usage
-
-**Upload a file:**
+#### macOS / Linux
 
 ```bash
-curl -X POST -F "file=@example.txt" http://localhost:9000/upload
+cd output
+chmod +x ./lan-realtime-share-mac-arm64   # change file name for your platform
+./lan-realtime-share-mac-arm64
 ```
 
-**Delete a file:**
+#### Windows (PowerShell)
 
-```bash
-curl -X POST -d "filename=example.txt" http://localhost:9000/delete
+```powershell
+cd output
+.\lan-realtime-share.exe
 ```
 
-**List files:**
-
-```bash
-curl http://localhost:9000/files
-```
+Server starts on:
+- `http://localhost:9000`
+- `http://<YOUR_LAN_IP>:9000`
 
 ---
 
-### Info for API Routes
+## 4) Open on other devices
 
-* All routes are **local**, so only devices on your **LAN** can access them.
-* `/ws` is used internally by the web interface for **real-time syncing** but can also be accessed by custom clients.
-* File uploads are **temporary**: each file has a countdown timer and is **automatically deleted** after expiry.
-* `/files` and `/delete` endpoints **sync changes across all connected clients in real-time**.
+1. Connect all devices to the same Wi-Fi/LAN.
+2. Start server on host machine.
+3. Open in browser:
+   - Host: `http://localhost:9000`
+   - Other devices: `http://<HOST_LAN_IP>:9000`
+
+Find LAN IP:
+- Windows: `ipconfig`
+- macOS: `ipconfig getifaddr en0` (or `en1`)
+- Linux: `ip a`
 
 ---
 
-## Notes
+## 5) How to use the app
 
-* The `uploads/` folder stores temporary files. Files expire automatically based on TTL.
-* Manual deletion of files also syncs immediately across all connected clients.
-* The watermark shows the developer name and GitHub username for attribution.
-* The server runs on **port 9000** by default.
+## Home page (`/`)
+
+### Realtime Text
+- Type in text box on any device.
+- Text syncs in realtime to all connected devices.
+
+### File Sharing
+- `Upload Files`: select multiple files.
+- `Upload Folder`: upload folder with structure preserved.
+- Download files directly.
+- Download folders as ZIP.
+- Upload progress shows percent, speed, ETA.
+- Uploaded items auto-expire after ~2 hours.
+
+### Delete / Clear behavior
+- Only server-host browser can:
+  - delete file/folder
+  - clear all uploads
+- Client browsers can still view and download.
+
+## Direct Share page (`/direct-share`)
+
+Use this when host wants to share an existing absolute path directly from host disk.
+
+- Add direct share from host browser only.
+- Can share file or folder.
+- Optional one-time code for secure first download.
+- Resume-friendly download support.
+
+### Important recommendation
+- Sharing a ZIP file is usually faster and more stable than sharing a raw folder.
+- For best performance, compress folder to `.zip` before sharing.
+
+### Direct Share permissions
+- Only server-host browser can:
+  - add direct share
+  - remove one direct share
+  - remove all direct shares
+- Client browsers can list and download shared entries.
+
+---
+
+## 6) Run from source (alternative)
+
+```bash
+go run cmd/server/main.go
+```
+
+Then open `http://localhost:9000`.
+
+---
+
+## 7) Docker (optional)
+
+Project includes Docker files, but app listens on port `9000` internally.
+If Docker mapping is incorrect in your environment, map host and container to `9000`.
+
+Typical mapping should be:
+
+```yaml
+ports:
+  - "9000:9000"
+```
+
+Then open `http://localhost:9000`.
+
+---
+
+## 8) API endpoints (quick reference)
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/` | GET | Main page |
+| `/direct-share` | GET | Direct Share page |
+| `/ws` | GET | WebSocket realtime sync |
+| `/upload` | POST | Upload files/folder content |
+| `/files` | GET | List uploaded items |
+| `/files/{path}` | GET | Download uploaded file |
+| `/download-zip?path=...` | GET | Download uploaded folder/file as zip |
+| `/delete?path=...&isFolder=true/false` | GET | Delete uploaded item (host only) |
+| `/clear-all` | POST | Clear all uploads (host only) |
+| `/direct-share/register` | POST | Add direct share (host only) |
+| `/direct-shares` | GET | List direct shares |
+| `/direct-share/download?id=...` | GET | Download direct share |
+| `/direct-share/delete?id=...` | POST | Delete direct share (host only) |
+| `/direct-share/clear-all` | POST | Delete all direct shares (host only) |
+| `/direct-share/host-info` | GET | Host info + capability flags |
+
+---
+
+## 9) Troubleshooting
+
+- **Server starts but page not loading on other device**
+  - Check both devices are on same LAN
+  - Allow app/port `9000` in firewall
+  - Use `http://` (not `https://`)
+- **Styles/UI broken**
+  - Ensure you started binary from `output/` where `static/` and `templates/` exist
+- **Cannot add/delete/clear from client device**
+  - Expected behavior: these actions are host-only by design
+- **Path not found in Direct Share**
+  - Path must exist on server host machine (absolute path)
+
+---
+
+## 10) Security notes
+
+- This app is intended for trusted LAN environments.
+- Anyone on the same LAN can access shared content unless your network is restricted.
+- One-time code in Direct Share protects initial access to that share.
+
+---
+
+## 11) License / Attribution
+
+Project by Dipak Shrestha.  
+GitHub: https://github.com/DipakShrestha-ADS
